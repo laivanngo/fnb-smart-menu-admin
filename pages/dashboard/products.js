@@ -1,5 +1,5 @@
-// Tệp: fnb-smart-menu-admin/pages/dashboard/products.js (Bản HOÀN CHỈNH CUỐI CÙNG)
-// (Đã thêm Upload Ảnh, "Hết hàng", và sửa lỗi cú pháp)
+// Tệp: fnb-smart-menu-admin/pages/dashboard/products.js (Bản HOÀN CHỈNH)
+// (Đã sửa lỗi cú pháp JSX 'style=""' và bao gồm logic "Hết hàng", "Upload Ảnh")
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
@@ -57,7 +57,7 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
         setIsSubmitting(false);
     };
 
-    // === HÀM MỚI: XỬ LÝ UPLOAD ẢNH ===
+    // === HÀM XỬ LÝ UPLOAD ẢNH ===
     const handleImageUpload = async (e) => {
         const file = e.target.files[0];
         if (!file) return;
@@ -75,7 +75,6 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
         formData.append("file", file); // Tên key phải là "file"
 
         try {
-            // 1. Gọi API /admin/upload-image
             const response = await fetch(`${apiUrl}/admin/upload-image`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}` },
@@ -85,7 +84,6 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
             
             const data = await response.json();
             
-            // 2. Cập nhật state 'product' với URL ảnh mới (vd: /static/...)
             setProduct(prev => ({ ...prev, image_url: data.image_url }));
 
         } catch (err) {
@@ -107,30 +105,24 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
             <input name="name" value={product.name} onChange={handleChange} placeholder="Tên sản phẩm" style={styles.input} required />
             <input name="base_price" type="number" value={product.base_price} onChange={handleChange} placeholder="Giá gốc" style={styles.input} required min="0" />
             
-            {/* === KHU VỰC UPLOAD ẢNH MỚI === */}
             <label style={styles.label}>Ảnh sản phẩm (Tải lên hoặc dán Emoji/link)</label>
-            {/* Trường 1: Tải lên */}
             <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} style={{...styles.input, padding: '5px'}} />
             {isUploading && <p style={{fontSize: '0.9em', color: '#555'}}>Đang tải ảnh lên...</p>}
             {uploadError && <p style={styles.error}>{uploadError}</p>}
-            {/* Trường 2: Dán link (nếu không tải lên) */}
             <input name="image_url" value={product.image_url || ''} onChange={handleChange} placeholder="Hoặc dán Emoji/Link ảnh vào đây" style={styles.input} />
             {product.image_url && (
                 <div style={{marginTop: '10px', marginBottom: '10px'}}>
                     <p style={{fontSize: '0.8em', color: '#555'}}>Ảnh xem trước:</p>
                     <img 
-                        // Nối apiUrl nếu là đường dẫn /static, giữ nguyên nếu là emoji/link http
                         src={product.image_url.startsWith('/') ? `${apiUrl}${product.image_url}` : product.image_url} 
                         alt="Preview" 
                         style={{width: '100px', height: '100px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #ddd'}} 
                     />
                 </div>
             )}
-            {/* === KẾT THÚC KHU VỰC UPLOAD === */}
 
             <input name="description" value={product.description || ''} onChange={handleChange} placeholder="Mô tả ngắn" style={styles.input} />
             
-            {/* Checkbox "Bán chạy" và "Hết hàng" */}
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
                 <div>
                     <input name="is_best_seller" type="checkbox" checked={product.is_best_seller} onChange={handleChange} id="is_best_seller" />
@@ -401,6 +393,7 @@ export default function ProductsPage() {
                 <table style={styles.table}>
                     <thead>
                         <tr>
+                            {/* === SỬA LỖI CÚ PHÁP TẠI ĐÂY === */}
                             <th style={styles.th}>ID</th>
                             <th style={styles.th}>Ảnh</th>
                             <th style={styles.th}>Tên Sản phẩm</th>
@@ -409,6 +402,7 @@ export default function ProductsPage() {
                             <th style={styles.th}>Tùy chọn Gắn</th>
                             <th style={styles.th}>Trạng thái</th>
                             <th style={styles.th}>Hành động</th>
+                            {/* === KẾT THÚC SỬA LỖI === */}
                         </tr>
                     </thead>
                     <tbody>
