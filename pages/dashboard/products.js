@@ -1,5 +1,5 @@
 // Tệp: fnb-smart-menu-admin/pages/dashboard/products.js (Bản HOÀN CHỈNH CUỐI CÙNG)
-// (Đã sửa lỗi cú pháp JSX và bao gồm logic "Hết hàng")
+// (Đã thêm Upload Ảnh, "Hết hàng", và sửa lỗi cú pháp)
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
@@ -24,6 +24,8 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
         category_id: categories[0]?.id || ''
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isUploading, setIsUploading] = useState(false); // State cho nút Upload
+    const [uploadError, setUploadError] = useState('');
 
     useEffect(() => {
          if (initialData) {
@@ -36,7 +38,7 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
                 is_out_of_stock: false, // Thêm "Hết hàng"
                 category_id: categories.length > 0 ? categories[0].id : ''
             });
-        }
+         }
     }, [categories, initialData]);
 
 
@@ -55,6 +57,45 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
         setIsSubmitting(false);
     };
 
+    // === HÀM MỚI: XỬ LÝ UPLOAD ẢNH ===
+    const handleImageUpload = async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const token = getToken();
+        if (!apiUrl || !token) {
+            setUploadError("Lỗi cấu hình hoặc chưa đăng nhập.");
+            return;
+        }
+
+        setIsUploading(true);
+        setUploadError('');
+        
+        const formData = new FormData();
+        formData.append("file", file); // Tên key phải là "file"
+
+        try {
+            // 1. Gọi API /admin/upload-image
+            const response = await fetch(`${apiUrl}/admin/upload-image`, {
+                method: 'POST',
+                headers: { 'Authorization': `Bearer ${token}` },
+                body: formData, // Gửi FormData
+            });
+            if (!response.ok) { const d = await response.json(); throw new Error(d.detail || "Upload thất bại"); }
+            
+            const data = await response.json();
+            
+            // 2. Cập nhật state 'product' với URL ảnh mới (vd: /static/...)
+            setProduct(prev => ({ ...prev, image_url: data.image_url }));
+
+        } catch (err) {
+            setUploadError(err.message);
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
+
     return (
         <form onSubmit={handleSubmit} style={styles.formPopup}>
             <h3>{initialData ? 'Sửa Sản phẩm' : 'Thêm Sản phẩm Mới'}</h3>
@@ -65,8 +106,29 @@ function ProductForm({ initialData, categories, onSubmit, onCancel }) {
             </select>
             <input name="name" value={product.name} onChange={handleChange} placeholder="Tên sản phẩm" style={styles.input} required />
             <input name="base_price" type="number" value={product.base_price} onChange={handleChange} placeholder="Giá gốc" style={styles.input} required min="0" />
+            
+            {/* === KHU VỰC UPLOAD ẢNH MỚI === */}
+            <label style={styles.label}>Ảnh sản phẩm (Tải lên hoặc dán Emoji/link)</label>
+            {/* Trường 1: Tải lên */}
+            <input type="file" accept="image/jpeg,image/png,image/webp" onChange={handleImageUpload} style={{...styles.input, padding: '5px'}} />
+            {isUploading && <p style={{fontSize: '0.9em', color: '#555'}}>Đang tải ảnh lên...</p>}
+            {uploadError && <p style={styles.error}>{uploadError}</p>}
+            {/* Trường 2: Dán link (nếu không tải lên) */}
+            <input name="image_url" value={product.image_url || ''} onChange={handleChange} placeholder="Hoặc dán Emoji/Link ảnh vào đây" style={styles.input} />
+            {product.image_url && (
+                <div style={{marginTop: '10px', marginBottom: '10px'}}>
+                    <p style={{fontSize: '0.8em', color: '#555'}}>Ảnh xem trước:</p>
+                    <img 
+                        // Nối apiUrl nếu là đường dẫn /static, giữ nguyên nếu là emoji/link http
+                        src={product.image_url.startsWith('/') ? `${apiUrl}${product.image_url}` : product.image_url} 
+                        alt="Preview" 
+                        style={{width: '100px', height: '100px', objectFit: 'cover', borderRadius: '4px', border: '1px solid #ddd'}} 
+                    />
+                </div>
+            )}
+            {/* === KẾT THÚC KHU VỰC UPLOAD === */}
+
             <input name="description" value={product.description || ''} onChange={handleChange} placeholder="Mô tả ngắn" style={styles.input} />
-            <input name="image_url" value={product.image_url || ''} onChange={handleChange} placeholder="Emoji hoặc Link ảnh" style={styles.input} />
             
             {/* Checkbox "Bán chạy" và "Hết hàng" */}
             <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: '15px'}}>
@@ -339,24 +401,31 @@ export default function ProductsPage() {
                 <table style={styles.table}>
                     <thead>
                         <tr>
-                            {/* === SỬA LỖI CÚ PHÁP TẠI ĐÂY === */}
                             <th style={styles.th}>ID</th>
+                            <th style={styles.th}>Ảnh</th>
                             <th style={styles.th}>Tên Sản phẩm</th>
                             <th style={styles.th}>Giá</th>
                             <th style={styles.th}>Danh mục</th>
                             <th style={styles.th}>Tùy chọn Gắn</th>
                             <th style={styles.th}>Trạng thái</th>
                             <th style={styles.th}>Hành động</th>
-                            {/* === KẾT THÚC SỬA LỖI === */}
                         </tr>
                     </thead>
                     <tbody>
                         {products.length === 0 ? (
-                             <tr><td colSpan="7" style={styles.tdCenter}>Chưa có sản phẩm nào.</td></tr>
+                             <tr><td colSpan="8" style={styles.tdCenter}>Chưa có sản phẩm nào.</td></tr>
                         ) : (
                             products.map((prod) => (
                                 <tr key={prod.id}>
                                     <td style={styles.td}>{prod.id}</td>
+                                    <td style={styles.td}>
+                                        {/* Hiển thị ảnh preview */}
+                                        {prod.image_url && (
+                                            prod.image_url.startsWith('/') ?
+                                            <img src={`${apiUrl}${prod.image_url}`} alt={prod.name} style={styles.tableImage} />
+                                            : <span style={{fontSize: '1.5rem'}}>{prod.image_url}</span>
+                                        )}
+                                    </td>
                                     <td style={styles.td}>{prod.name}</td>
                                     <td style={styles.td}>{prod.base_price.toLocaleString('vi-VN')}đ</td>
                                     <td style={styles.td}>
@@ -391,12 +460,14 @@ export default function ProductsPage() {
 // --- CSS (Thêm Badge) ---
 const styles = {
     container: { padding: '30px' },
+    label: { display: 'block', marginBottom: '5px', fontWeight: '600', color: '#555' },
     backLink: { display: 'inline-block', marginBottom: '20px', color: '#555', textDecoration: 'none' },
     button: { padding: '10px 15px', background: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer', fontSize: '1rem', marginBottom: '20px' },
     error: { color: 'red', marginBottom: '15px', fontSize: '0.9rem' },
     table: { width: '100%', borderCollapse: 'collapse', marginTop: '20px' },
     th: { background: '#f4f4f4', padding: '12px', border: '1px solid #ddd', textAlign: 'left', whiteSpace: 'nowrap' },
     td: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle' },
+    tableImage: { width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px' },
      tdSmall: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle', fontSize: '0.85em', color: '#555' },
     tdCenter: { padding: '20px', border: '1px solid #ddd', textAlign: 'center', color: '#777' },
     buttonAction: { padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500' },
@@ -404,7 +475,7 @@ const styles = {
     linkButton: { marginRight: '5px', padding: '5px 10px', background: '#17a2b8', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' },
     deleteButton: { padding: '5px 10px', background: '#dc3545', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' },
     popupBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }, // Thêm maxHeight
+    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' },
     input: { display: 'block', width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' },
     formActions: { marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' },
     activeBadge: { background: '#28a745', color: 'white', padding: '3px 8px', borderRadius: '10px', fontSize: '0.8em' },
