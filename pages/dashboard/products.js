@@ -310,8 +310,7 @@ export default function ProductsPage() {
 
             {error && <p style={styles.error}>{error}</p>}
 
-            {/* === ĐÂY LÀ PHẦN BỊ LỖI CÚ PHÁP === */}
-            {/* Sửa lại để chứa component thật sự */}
+            {/* Component ProductForm */}
             {showForm && (
                 <div style={styles.popupBackdrop}>
                     <ProductForm
@@ -323,6 +322,7 @@ export default function ProductsPage() {
                 </div>
             )}
 
+            {/* Component ManageProductOptions */}
             {managingOptionsFor && (
                  <div style={styles.popupBackdrop}>
                     <ManageProductOptions
@@ -333,20 +333,21 @@ export default function ProductsPage() {
                     />
                 </div>
             )}
-            {/* === KẾT THÚC SỬA LỖI === */}
-
+            
             {/* Bảng hiển thị (Đã thêm cột Trạng thái) */}
             {isLoading ? ( <p>Đang tải danh sách...</p> ) : (
                 <table style={styles.table}>
                     <thead>
                         <tr>
+                            {/* === SỬA LỖI CÚ PHÁP TẠI ĐÂY === */}
                             <th style={styles.th}>ID</th>
                             <th style={styles.th}>Tên Sản phẩm</th>
                             <th style={styles.th}>Giá</th>
                             <th style={styles.th}>Danh mục</th>
                             <th style={styles.th}>Tùy chọn Gắn</th>
-                            <th style{...styles.th}>Trạng thái</th>
+                            <th style={styles.th}>Trạng thái</th>
                             <th style={styles.th}>Hành động</th>
+                            {/* === KẾT THÚC SỬA LỖI === */}
                         </tr>
                     </thead>
                     <tbody>
@@ -403,7 +404,7 @@ const styles = {
     linkButton: { marginRight: '5px', padding: '5px 10px', background: '#17a2b8', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' },
     deleteButton: { padding: '5px 10px', background: '#dc3545', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white' },
     popupBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '500px' },
+    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '500px', maxHeight: '90vh', overflowY: 'auto' }, // Thêm maxHeight
     input: { display: 'block', width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' },
     formActions: { marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' },
     activeBadge: { background: '#28a745', color: 'white', padding: '3px 8px', borderRadius: '10px', fontSize: '0.8em' },
