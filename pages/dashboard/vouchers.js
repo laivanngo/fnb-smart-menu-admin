@@ -1,4 +1,4 @@
-// Tệp: pages/dashboard/vouchers.js
+// Tệp: pages/dashboard/vouchers.js (ĐÃ SỬA LỖI HARD-CODE)
 // Mục đích: Trang quản lý Mã giảm giá (Voucher)
 
 import React, { useState, useEffect } from 'react';
@@ -11,6 +11,9 @@ const getToken = () => {
     if (typeof window !== 'undefined') { return localStorage.getItem('admin_token'); }
     return null;
 };
+
+// Sử dụng biến này
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 // Component Form (dùng cho cả Tạo mới và Sửa)
 function VoucherForm({ initialData, onSubmit, onCancel }) {
@@ -115,8 +118,17 @@ export default function VouchersPage() {
     const fetchData = async () => {
         setIsLoading(true); setError(''); const token = getToken();
         if (!token) { router.replace('/login'); return; }
+        
+        // 1. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            setIsLoading(false);
+            return;
+        }
+
         try {
-            const response = await fetch('http://127.0.0.1:8000/admin/vouchers/', { headers: { 'Authorization': `Bearer ${token}` } });
+            // 2. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/vouchers/`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) throw new Error('Không thể tải Vouchers.');
             const data = await response.json(); setVouchers(data);
@@ -133,7 +145,15 @@ export default function VouchersPage() {
     // --- Logic Submit Form (Tạo/Sửa) ---
     const handleFormSubmit = async (voucherData) => {
         setError(''); const token = getToken(); const isEditing = !!editingVoucher;
-        const url = isEditing ? `http://127.0.0.1:8000/admin/vouchers/${editingVoucher.id}` : 'http://127.0.0.1:8000/admin/vouchers/';
+
+        // 3. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+        
+        // 4. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+        const url = isEditing ? `${apiUrl}/admin/vouchers/${editingVoucher.id}` : `${apiUrl}/admin/vouchers/`;
         const method = isEditing ? 'PUT' : 'POST';
         try {
             const response = await fetch(url, {
@@ -150,8 +170,16 @@ export default function VouchersPage() {
     const handleDelete = async (voucherId) => {
         if (!confirm('Bạn có chắc chắn muốn xóa mã giảm giá này?')) return;
         setError(''); const token = getToken();
+
+        // 5. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+
         try {
-            const response = await fetch(`http://127.0.0.1:8000/admin/vouchers/${voucherId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
+            // 6. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/vouchers/${voucherId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) throw new Error('Xóa thất bại.');
             fetchData();

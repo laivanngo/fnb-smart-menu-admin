@@ -14,6 +14,8 @@ const getToken = () => {
     return null;
 };
 
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
 export default function DashboardPage() {
     const router = useRouter();
     const [isAdmin, setIsAdmin] = useState(false); // Trạng thái xác thực

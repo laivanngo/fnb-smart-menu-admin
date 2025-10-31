@@ -1,9 +1,11 @@
-// Tệp: pages/login.js (ĐÃ CẢI THIỆN XỬ LÝ LỖI)
+// Tệp: pages/login.js (ĐÃ SỬA LỖI HARD-CODE)
 // Mục đích: Trang đăng nhập cho Admin Dashboard.
 
 import { useState } from 'react';
 import { useRouter } from 'next/router';
 import Head from 'next/head';
+// Đảm bảo biến này được sử dụng
+const apiUrl = process.env.NEXT_PUBLIC_API_URL; 
 
 export default function LoginPage() {
     const [username, setUsername] = useState('');
@@ -17,13 +19,22 @@ export default function LoginPage() {
         setError('');
         setIsLoading(true);
 
+        // Kiểm tra xem apiUrl có tồn tại không
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập. Vui lòng kiểm tra file .env.local hoặc cấu hình build.");
+            setIsLoading(false);
+            return;
+        }
+
         let response; // Khai báo response ở đây để dùng trong cả try/catch
         try {
             const formData = new URLSearchParams();
             formData.append('username', username);
             formData.append('password', password);
 
-            response = await fetch('http://127.0.0.1:8000/admin/token', { // Địa chỉ Backend
+            // === SỬA LỖI TẠI ĐÂY ===
+            // Đã thay thế 'http://127.0.0.1:8000/admin/token' bằng `${apiUrl}/admin/token`
+            response = await fetch(`${apiUrl}/admin/token`, { // Địa chỉ Backend
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/x-www-form-urlencoded',
@@ -62,8 +73,8 @@ export default function LoginPage() {
             console.error("Chi tiết lỗi Đăng nhập:", err); // In lỗi đầy đủ ra Console
 
             // Phân biệt lỗi mạng và lỗi ứng dụng
-            if (err instanceof TypeError && err.message === 'Failed to fetch') {
-                 setError('Không thể kết nối đến máy chủ Backend. Vui lòng đảm bảo Backend đang chạy tại http://127.0.0.1:8000.');
+            if (err instanceof TypeError && err.message.includes('Failed to fetch')) {
+                 setError(`Không thể kết nối đến máy chủ Backend tại: ${apiUrl}. Vui lòng kiểm tra lại.`);
             } else {
                  // Hiển thị lỗi từ Backend hoặc lỗi chung
                  setError(err.message || 'Đã xảy ra lỗi không xác định.');

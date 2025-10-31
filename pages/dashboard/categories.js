@@ -1,4 +1,4 @@
-// Tệp: pages/dashboard/categories.js
+// Tệp: pages/dashboard/categories.js (ĐÃ SỬA LỖI HARD-CODE)
 // Mục đích: Trang quản lý Danh mục (Xem và Thêm mới)
 
 import React, { useState, useEffect } from 'react';
@@ -13,6 +13,9 @@ const getToken = () => {
     }
     return null;
 };
+
+// Sử dụng biến này
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 export default function CategoriesPage() {
     const router = useRouter();
@@ -31,8 +34,16 @@ export default function CategoriesPage() {
             return;
         }
 
+        // 1. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            setIsLoading(false);
+            return;
+        }
+
         try {
-            const response = await fetch('http://127.0.0.1:8000/admin/categories/', {
+            // 2. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/categories/`, {
                 headers: { 'Authorization': `Bearer ${token}` },
             });
 
@@ -66,9 +77,16 @@ export default function CategoriesPage() {
             setError("Tên danh mục không được để trống.");
             return;
         }
+        
+        // 3. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
 
         try {
-            const response = await fetch('http://127.0.0.1:8000/admin/categories/', {
+            // 4. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/categories/`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,

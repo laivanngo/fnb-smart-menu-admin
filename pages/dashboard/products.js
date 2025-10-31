@@ -1,4 +1,4 @@
-// Tệp: pages/dashboard/products.js (HOÀN CHỈNH - Đã thêm "Gắn Tùy chọn")
+// Tệp: pages/dashboard/products.js (ĐÃ SỬA LỖI HARD-CODE)
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
@@ -10,6 +10,9 @@ const getToken = () => {
     if (typeof window !== 'undefined') { return localStorage.getItem('admin_token'); }
     return null;
 };
+
+// Sử dụng biến này
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 // --- Component Form Sửa/Thêm Sản phẩm ---
 function ProductForm({ initialData, categories, onSubmit, onCancel }) {
@@ -95,8 +98,17 @@ function ManageProductOptions({ product, allOptions, onSave, onCancel }) {
         setIsSaving(true);
         setError('');
         const token = getToken();
+
+        // 1. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            setIsSaving(false);
+            return;
+        }
+
         try {
-            const response = await fetch(`http://127.0.0.1:8000/admin/products/${product.id}/link_options`, {
+            // 2. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/products/${product.id}/link_options`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -164,13 +176,20 @@ export default function ProductsPage() {
         const token = getToken();
         if (!token) { router.replace('/login'); return; }
 
+        // 3. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            setIsLoading(false);
+            return;
+        }
+
         try {
             const headers = { 'Authorization': `Bearer ${token}` };
-            // Gọi cả 3 API cùng lúc
+            // 4. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
             const [prodRes, catRes, optRes] = await Promise.all([
-                fetch('http://127.0.0.1:8000/admin/products/', { headers }),
-                fetch('http://127.0.0.1:8000/admin/categories/', { headers }),
-                fetch('http://127.0.0.1:8000/admin/options/', { headers }) // Lấy Thư viện Tùy chọn
+                fetch(`${apiUrl}/admin/products/`, { headers }),
+                fetch(`${apiUrl}/admin/categories/`, { headers }),
+                fetch(`${apiUrl}/admin/options/`, { headers }) // Lấy Thư viện Tùy chọn
             ]);
 
             if (prodRes.status === 401 || catRes.status === 401 || optRes.status === 401) throw new Error('Token hết hạn.');
@@ -205,8 +224,16 @@ export default function ProductsPage() {
     const handleFormSubmit = async (productData) => { /* ... (Giữ nguyên như cũ) ... */
         setError('');
         const token = getToken();
+        
+        // 5. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+        
         const isEditing = !!editingProduct;
-        const url = isEditing ? `http://127.0.0.1:8000/admin/products/${editingProduct.id}` : 'http://127.0.0.1:8000/admin/products/';
+        // 6. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+        const url = isEditing ? `${apiUrl}/admin/products/${editingProduct.id}` : `${apiUrl}/admin/products/`;
         const method = isEditing ? 'PUT' : 'POST';
 
         const payload = { ...productData };
@@ -251,8 +278,16 @@ export default function ProductsPage() {
         if (!confirm('Bạn có chắc chắn muốn xóa sản phẩm này?')) return;
         setError('');
         const token = getToken();
+
+        // 7. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+
         try {
-            const response = await fetch(`http://127.0.0.1:8000/admin/products/${productId}`, {
+            // 8. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/products/${productId}`, {
                 method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
             });
             if (response.status === 401) throw new Error('Token hết hạn.');
@@ -302,11 +337,11 @@ export default function ProductsPage() {
                     <thead>
                         <tr>
                             <th style={styles.th}>ID</th>
-                            <th style={styles.th}>Tên Sản phẩm</th>
-                            <th style={styles.th}>Giá</th>
-                            <th style={styles.th}>Danh mục</th>
-                            <th style={styles.th}>Tùy chọn Gắn</th> {/* Thêm cột mới */}
-                            <th style={styles.th}>Hành động</th>
+                            <th style="...styles.th">Tên Sản phẩm</th>
+                            <th style="...styles.th">Giá</th>
+                            <th style="...styles.th">Danh mục</th>
+                            <th style="...styles.th">Tùy chọn Gắn</th> {/* Thêm cột mới */}
+                            <th style="...styles.th">Hành động</th>
                         </tr>
                     </thead>
                     <tbody>

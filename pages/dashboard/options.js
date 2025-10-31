@@ -1,4 +1,4 @@
-// Tệp: pages/dashboard/options.js
+// Tệp: pages/dashboard/options.js (ĐÃ SỬA LỖI HARD-CODE)
 // Mục đích: Trang quản lý "Thư viện Tùy chọn" (Nhóm và Lựa chọn con)
 
 import React, { useState, useEffect } from 'react';
@@ -12,6 +12,9 @@ const getToken = () => {
     return null;
 };
 
+// Sử dụng biến này
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+
 // Component Form con để thêm Lựa chọn con (Value)
 function OptionValueForm({ optionId, onValueCreated }) {
     const [name, setName] = useState('');
@@ -22,8 +25,17 @@ function OptionValueForm({ optionId, onValueCreated }) {
         e.preventDefault();
         setIsSubmitting(true);
         const token = getToken();
+
+        // 1. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            alert("Lỗi cấu hình: API URL chưa được thiết lập.");
+            setIsSubmitting(false);
+            return;
+        }
+
         try {
-            const response = await fetch(`http://127.0.0.1:8000/admin/options/${optionId}/values/`, {
+            // 2. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/options/${optionId}/values/`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${token}`,
@@ -67,8 +79,16 @@ export default function OptionsPage() {
         const token = getToken();
         if (!token) { router.replace('/login'); return; }
 
+        // 3. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            setIsLoading(false);
+            return;
+        }
+
         try {
-            const response = await fetch('http://127.0.0.1:8000/admin/options/', {
+            // 4. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/options/`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             if (response.status === 401) throw new Error('Token hết hạn.');
@@ -92,8 +112,15 @@ export default function OptionsPage() {
         const token = getToken();
         if (!newOption.name.trim()) { setError("Tên nhóm không được trống."); return; }
 
+        // 5. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+
         try {
-            const response = await fetch('http://127.0.0.1:8000/admin/options/', {
+            // 6. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/options/`, {
                 method: 'POST',
                 headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
                 body: JSON.stringify({ name: newOption.name, type: newOption.type, display_order: 0 }), // Thêm display_order
@@ -109,8 +136,16 @@ export default function OptionsPage() {
         if (!confirm('Xóa Nhóm này sẽ xóa luôn các Lựa chọn con bên trong. Bạn chắc chắn?')) return;
         setError('');
         const token = getToken();
+
+        // 7. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+
         try {
-            const response = await fetch(`http://127.0.0.1:8000/admin/options/${optionId}`, {
+            // 8. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/options/${optionId}`, {
                 method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Xóa thất bại');
@@ -123,8 +158,16 @@ export default function OptionsPage() {
         if (!confirm('Bạn có chắc chắn muốn xóa Lựa chọn này?')) return;
         setError('');
         const token = getToken();
+
+        // 9. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+
         try {
-            const response = await fetch(`http://127.0.0.1:8000/admin/values/${valueId}`, { // API xóa value
+            // 10. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/values/${valueId}`, { // API xóa value
                 method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` }
             });
             if (!response.ok) throw new Error('Xóa thất bại');

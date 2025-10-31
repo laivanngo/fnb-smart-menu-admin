@@ -1,4 +1,4 @@
-// Tệp: pages/dashboard/orders.js (HOÀN THIỆN CHI TIẾT ĐƠN)
+// Tệp: pages/dashboard/orders.js (ĐÃ SỬA LỖI HARD-CODE)
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
@@ -10,6 +10,9 @@ const getToken = () => {
     if (typeof window !== 'undefined') { return localStorage.getItem('admin_token'); }
     return null;
 };
+
+// Sử dụng biến này
+const apiUrl = process.env.NEXT_PUBLIC_API_URL;
 
 // Component để hiển thị chi tiết đơn hàng (Modal)
 function OrderDetails({ orderId, onClose }) { // Nhận orderId thay vì cả object
@@ -24,8 +27,16 @@ function OrderDetails({ orderId, onClose }) { // Nhận orderId thay vì cả ob
             setIsLoading(true); setError(''); const token = getToken();
             if (!token || !orderId) return;
 
+            // 1. Thêm kiểm tra apiUrl
+            if (!apiUrl) {
+                setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+                setIsLoading(false);
+                return;
+            }
+
             try {
-                const response = await fetch(`http://127.0.0.1:8000/admin/orders/${orderId}`, {
+                // 2. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+                const response = await fetch(`${apiUrl}/admin/orders/${orderId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.status === 401) throw new Error('Token hết hạn.');
@@ -107,8 +118,17 @@ export default function OrdersPage() {
     const fetchData = async () => { /* ... (Giữ nguyên) ... */
         setIsLoading(true); setError(''); const token = getToken();
         if (!token) { router.replace('/login'); return; }
+
+        // 3. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            setIsLoading(false);
+            return;
+        }
+
         try {
-            const response = await fetch('http://127.0.0.1:8000/admin/orders/', { headers: { 'Authorization': `Bearer ${token}` } });
+            // 4. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/orders/`, { headers: { 'Authorization': `Bearer ${token}` } });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) throw new Error('Không thể tải Đơn hàng.');
             const data = await response.json();
@@ -121,8 +141,16 @@ export default function OrdersPage() {
     // --- Logic Cập nhật Trạng thái ---
     const handleUpdateStatus = async (orderId, newStatus) => { /* ... (Giữ nguyên) ... */
          setError(''); const token = getToken();
+
+        // 5. Thêm kiểm tra apiUrl
+        if (!apiUrl) {
+            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+            return;
+        }
+
         try {
-            const response = await fetch(`http://127.0.0.1:8000/admin/orders/${orderId}/status?status=${newStatus}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
+            // 6. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
+            const response = await fetch(`${apiUrl}/admin/orders/${orderId}/status?status=${newStatus}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) { const d=await response.json(); throw new Error(d.detail || 'Cập nhật thất bại'); }
             fetchData();
