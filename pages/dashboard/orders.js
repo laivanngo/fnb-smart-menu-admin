@@ -1,4 +1,5 @@
-// Tệp: pages/dashboard/orders.js (ĐÃ SỬA LỖI HARD-CODE)
+// Tệp: pages/dashboard/orders.js
+// (BẢN VÁ 1.6 - ĐÃ THÊM PHÂN TRANG)
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
@@ -13,47 +14,41 @@ const getToken = () => {
 
 // Sử dụng biến này
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+const ITEMS_PER_PAGE = 50; // Hiển thị 50 đơn hàng mỗi trang
 
 // Component để hiển thị chi tiết đơn hàng (Modal)
-function OrderDetails({ orderId, onClose }) { // Nhận orderId thay vì cả object
-    const [orderDetails, setOrderDetails] = useState(null); // State để lưu chi tiết
+function OrderDetails({ orderId, onClose }) { 
+    const [orderDetails, setOrderDetails] = useState(null); 
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
     const router = useRouter();
 
-    // Fetch chi tiết đơn hàng khi modal mở ra
     useEffect(() => {
         const fetchDetails = async () => {
             setIsLoading(true); setError(''); const token = getToken();
             if (!token || !orderId) return;
-
-            // 1. Thêm kiểm tra apiUrl
             if (!apiUrl) {
                 setError("Lỗi cấu hình: API URL chưa được thiết lập.");
                 setIsLoading(false);
                 return;
             }
-
             try {
-                // 2. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
                 const response = await fetch(`${apiUrl}/admin/orders/${orderId}`, {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (response.status === 401) throw new Error('Token hết hạn.');
                 if (!response.ok) throw new Error('Không thể tải chi tiết đơn hàng.');
                 const data = await response.json();
-                setOrderDetails(data); // Lưu chi tiết vào state
+                setOrderDetails(data); 
             } catch (err) {
                 setError(err.message);
-                // (Xử lý lỗi token...)
             } finally {
                 setIsLoading(false);
             }
         };
         fetchDetails();
-    }, [orderId]); // Chạy lại khi orderId thay đổi
+    }, [orderId]); 
 
-    // Hàm format tiền tệ
     const formatCurrency = (amount) => amount.toLocaleString('vi-VN') + 'đ';
 
     return (
@@ -64,6 +59,9 @@ function OrderDetails({ orderId, onClose }) { // Nhận orderId thay vì cả ob
                  error ? <p style={styles.error}>{error}</p> :
                  orderDetails ? (
                     <div style={{fontSize: '0.9rem'}}>
+                        {/* === THÊM HIỂN THỊ NGÀY GIỜ ĐẶT HÀNG === */}
+                        <p><strong>Ngày đặt:</strong> {new Date(orderDetails.created_at).toLocaleString('vi-VN')}</p> 
+                        <hr style={{margin: '10px 0'}}/>
                         <p><strong>Khách hàng:</strong> {orderDetails.customer_name}</p>
                         <p><strong>SĐT:</strong> {orderDetails.customer_phone}</p>
                         <p><strong>Địa chỉ:</strong> {orderDetails.customer_address}</p>
@@ -87,7 +85,7 @@ function OrderDetails({ orderId, onClose }) { // Nhận orderId thay vì cả ob
                             ))}
                         </ul>
                          <hr style={{margin: '10px 0'}}/>
-                         <div className="checkout-total" style={{fontSize: '1rem'}}> {/* Tái sử dụng class CSS */}
+                         <div className="checkout-total" style={{fontSize: '1rem'}}> 
                                 <div className="total-row"><span>Tạm tính:</span><span>{formatCurrency(orderDetails.sub_total)}</span></div>
                                 <div className="total-row"><span>Phí giao hàng:</span><span>{orderDetails.delivery_fee > 0 ? formatCurrency(orderDetails.delivery_fee) : 'Miễn phí'}</span></div>
                                 {orderDetails.discount_amount > 0 && ( <div className="total-row discount"><span>Giảm giá ({orderDetails.voucher_code}):</span><span>-{formatCurrency(orderDetails.discount_amount)}</span></div> )}
@@ -103,58 +101,105 @@ function OrderDetails({ orderId, onClose }) { // Nhận orderId thay vì cả ob
 }
 
 
-// Component Trang chính
+// --- Component Trang chính (ĐÃ NÂNG CẤP) ---
 export default function OrdersPage() {
     const router = useRouter();
-    const [orders, setOrders] = useState([]); // Danh sách đơn hàng (cơ bản)
-    const [selectedOrderId, setSelectedOrderId] = useState(null); // Chỉ lưu ID đơn hàng đang xem
+    const [orders, setOrders] = useState([]); 
+    const [selectedOrderId, setSelectedOrderId] = useState(null); 
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    
+    // === THÊM STATE CHO PHÂN TRANG ===
+    const [page, setPage] = useState(1); // Mặc định là trang 1
+    const [isLastPage, setIsLastPage] = useState(false); // Cờ để biết đây có phải trang cuối không
+    // ==================================
 
     const orderStatuses = ["MOI", "DA_XAC_NHAN", "DANG_THUC_HIEN", "DANG_GIAO", "HOAN_TAT", "DA_HUY"];
     const statusLabels = { "MOI": "Mới", "DA_XAC_NHAN": "Đã xác nhận", "DANG_THUC_HIEN": "Đang làm", "DANG_GIAO": "Đang giao", "HOAN_TAT": "Hoàn tất", "DA_HUY": "Đã hủy" };
 
-    // --- Logic Fetch Dữ liệu ---
-    const fetchData = async () => { /* ... (Giữ nguyên) ... */
-        setIsLoading(true); setError(''); const token = getToken();
+    // --- NÂNG CẤP LOGIC FETCH DỮ LIỆU ---
+    const fetchData = async (pageNum = 1) => { 
+        setIsLoading(true); setError(''); 
+        const token = getToken();
         if (!token) { router.replace('/login'); return; }
-
-        // 3. Thêm kiểm tra apiUrl
         if (!apiUrl) {
             setError("Lỗi cấu hình: API URL chưa được thiết lập.");
             setIsLoading(false);
             return;
         }
 
+        // Tính toán skip/limit
+        const limit = ITEMS_PER_PAGE;
+        const skip = (pageNum - 1) * limit;
+        
         try {
-            // 4. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
-            const response = await fetch(`${apiUrl}/admin/orders/`, { headers: { 'Authorization': `Bearer ${token}` } });
+            // Thêm skip và limit vào URL
+            const response = await fetch(`${apiUrl}/admin/orders/?skip=${skip}&limit=${limit}`, { 
+                headers: { 'Authorization': `Bearer ${token}` } 
+            });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) throw new Error('Không thể tải Đơn hàng.');
+            
             const data = await response.json();
             setOrders(data);
-        } catch (err) { setError(err.message); /* (Xử lý lỗi token...) */ }
+            setPage(pageNum); // Cập nhật số trang hiện tại
+
+            // Kiểm tra xem đây có phải trang cuối không
+            // Nếu số lượng kết quả trả về < số lượng yêu cầu, đây là trang cuối.
+            if (data.length < ITEMS_PER_PAGE) {
+                setIsLastPage(true);
+            } else {
+                setIsLastPage(false);
+            }
+
+        } catch (err) { 
+            setError(err.message); 
+            if (err.message.includes('Token')) {
+                localStorage.removeItem('admin_token');
+                router.replace('/login');
+            }
+        }
         finally { setIsLoading(false); }
     };
-    useEffect(() => { fetchData(); }, []);
+
+    // Chạy khi trang tải lần đầu (chạy 1 lần)
+    useEffect(() => { 
+        fetchData(1); // Tải trang 1
+    }, []);
+
+    // --- CÁC HÀM XỬ LÝ NÚT PHÂN TRANG ---
+    const handleNextPage = () => {
+        if (!isLastPage) {
+            fetchData(page + 1); // Tải trang kế tiếp
+        }
+    };
+    const handlePrevPage = () => {
+        if (page > 1) {
+            fetchData(page - 1); // Tải trang trước đó
+        }
+    };
+    // =====================================
 
     // --- Logic Cập nhật Trạng thái ---
-    const handleUpdateStatus = async (orderId, newStatus) => { /* ... (Giữ nguyên) ... */
+    const handleUpdateStatus = async (orderId, newStatus) => { 
          setError(''); const token = getToken();
-
-        // 5. Thêm kiểm tra apiUrl
         if (!apiUrl) {
             setError("Lỗi cấu hình: API URL chưa được thiết lập.");
             return;
         }
-
         try {
-            // 6. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
-            const response = await fetch(`${apiUrl}/admin/orders/${orderId}/status?status=${newStatus}`, { method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } });
+            const response = await fetch(`${apiUrl}/admin/orders/${orderId}/status?status=${newStatus}`, { 
+                method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } 
+            });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) { const d=await response.json(); throw new Error(d.detail || 'Cập nhật thất bại'); }
-            fetchData();
-        } catch (err) { setError(err.message); /* (Xử lý lỗi token...) */ }
+            
+            // Thay vì tải lại toàn bộ, chỉ cập nhật 1 dòng
+            setOrders(prevOrders => prevOrders.map(order => 
+                order.id === orderId ? { ...order, status: newStatus } : order
+            ));
+
+        } catch (err) { setError(err.message); }
     };
 
     // --- Giao diện ---
@@ -163,17 +208,31 @@ export default function OrdersPage() {
             <Head><title>Quản lý Đơn hàng</title></Head>
             <Link href="/dashboard" style={styles.backLink}>← Quay lại Dashboard</Link>
             <h1>🛒 Quản lý Đơn hàng</h1>
-             <button onClick={fetchData} style={{...styles.buttonAction, background: '#17a2b8', marginBottom: '15px'}} disabled={isLoading}>
-                 {isLoading ? 'Đang tải...' : 'Tải lại danh sách'}
-            </button> {/* Nút tải lại */}
+             <button onClick={() => fetchData(page)} style={{...styles.buttonAction, background: '#17a2b8', marginBottom: '15px'}} disabled={isLoading}>
+                 {isLoading ? 'Đang tải...' : 'Tải lại trang hiện tại'}
+            </button> 
 
             {error && <p style={styles.error}>{error}</p>}
+            
+            {/* === THÊM NÚT ĐIỀU HƯỚNG PHÂN TRANG === */}
+            <div style={styles.paginationControls}>
+                <button onClick={handlePrevPage} disabled={isLoading || page <= 1} style={styles.buttonAction}>
+                    ‹ Trang trước
+                </button>
+                <span style={{padding: '0 15px', color: '#555', fontWeight: 'bold'}}>Trang {page}</span>
+                <button onClick={handleNextPage} disabled={isLoading || isLastPage} style={styles.buttonAction}>
+                    Trang sau ›
+                </button>
+            </div>
+            {/* ======================================= */}
 
             {isLoading ? <p>Đang tải đơn hàng...</p> : (
                 <table style={styles.table}>
                     <thead>
                         <tr>
                             <th style={styles.th}>Mã ĐH</th>
+                            {/* === THÊM CỘT THỜI GIAN === */}
+                            <th style={styles.th}>Thời gian đặt</th> 
                             <th style={styles.th}>Tổng tiền</th>
                             <th style={styles.th}>Trạng thái</th>
                             <th style={styles.th}>Hành động</th>
@@ -181,11 +240,13 @@ export default function OrdersPage() {
                     </thead>
                     <tbody>
                         {orders.length === 0 ? (
-                            <tr><td colSpan="4" style={styles.tdCenter}>Chưa có đơn hàng nào.</td></tr>
+                            <tr><td colSpan="5" style={styles.tdCenter}>Chưa có đơn hàng nào.</td></tr>
                         ) : (
                             orders.map((order) => (
                                 <tr key={order.id} style={order.status === 'MOI' ? {background: '#fffbe6'} : {}}>
                                     <td style={{...styles.td, fontWeight: 'bold'}}>#{order.id}</td>
+                                    {/* === THÊM DỮ LIỆU THỜI GIAN === */}
+                                    <td style={styles.tdSmall}>{new Date(order.created_at).toLocaleString('vi-VN')}</td>
                                     <td style={styles.td}>{order.total_amount.toLocaleString('vi-VN')}đ</td>
                                     <td style={styles.td}>
                                         <select value={order.status} onChange={(e) => handleUpdateStatus(order.id, e.target.value)} style={styles.statusSelect} >
@@ -193,7 +254,6 @@ export default function OrdersPage() {
                                         </select>
                                     </td>
                                     <td style={styles.td}>
-                                        {/* Lưu ID vào state khi bấm nút */}
                                         <button onClick={() => setSelectedOrderId(order.id)} style={styles.detailButton}>Xem CT</button>
                                     </td>
                                  </tr>
@@ -202,6 +262,18 @@ export default function OrdersPage() {
                     </tbody>
                 </table>
             )}
+            
+            {/* === THÊM NÚT ĐIỀU HƯỚNG (BÊN DƯỚI) === */}
+            <div style={styles.paginationControls}>
+                <button onClick={handlePrevPage} disabled={isLoading || page <= 1} style={styles.buttonAction}>
+                    ‹ Trang trước
+                </button>
+                <span style={{padding: '0 15px', color: '#555', fontWeight: 'bold'}}>Trang {page}</span>
+                <button onClick={handleNextPage} disabled={isLoading || isLastPage} style={styles.buttonAction}>
+                    Trang sau ›
+                </button>
+            </div>
+            {/* ======================================= */}
 
             {/* Modal xem chi tiết (Truyền ID vào) */}
             {selectedOrderId && (
@@ -211,7 +283,7 @@ export default function OrdersPage() {
     );
 }
 
-// --- CSS nội bộ ---
+// --- CSS (THÊM STYLE MỚI) ---
 const styles = {
     container: { padding: '30px' },
     backLink: { display: 'inline-block', marginBottom: '20px', color: '#555', textDecoration: 'none' },
@@ -219,21 +291,22 @@ const styles = {
     table: { width: '100%', borderCollapse: 'collapse', marginTop: '20px' },
     th: { background: '#f4f4f4', padding: '12px', border: '1px solid #ddd', textAlign: 'left', whiteSpace: 'nowrap' },
     td: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle', fontSize: '0.9rem' },
+    tdSmall: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle', fontSize: '0.85em', color: '#555' }, // Style cho cột thời gian
     tdCenter: { padding: '20px', border: '1px solid #ddd', textAlign: 'center', color: '#777' },
     statusSelect: { padding: '5px', borderRadius: '4px', border: '1px solid #ccc' },
     detailButton: { padding: '5px 10px', background: '#17a2b8', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white', fontSize: '0.8rem' },
     popupBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column'}, // Thêm flex
-    buttonAction: { padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500' },
-     // Thêm style cho phần total trong popup
-    checkoutTotal: { fontSize: '1rem', marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid #eee' }, // Đẩy xuống cuối
+    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflowY: 'auto' }, // Cho phép scroll popup
+    buttonAction: { padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', background: '#007bff', color: 'white' },
+    paginationControls: { marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, // Style cho Nút phân trang
+    checkoutTotal: { fontSize: '1rem', marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid #eee' }, 
     totalRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.95rem' },
     totalRowDiscount: { color: '#dc3545', fontWeight: '600' },
     totalRowFinal: { fontSize: '1.1rem', fontWeight: '700', borderTop: '1px solid #ddd', paddingTop: '8px', marginTop: '5px' }
 };
 
-// Merge các style checkout vào styles chung (để tái sử dụng class)
+// Merge các style checkout
 styles.checkoutTotal = {...styles.checkoutTotal, ...{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #eee' }};
 styles.totalRow = {...styles.totalRow, ...{ marginBottom: '5px', fontSize: '0.95rem' }};
-styles.discount = {...styles.totalRowDiscount, ...{ color: '#dc3545', fontWeight: '600' }}; // Đổi tên class
-styles.final = {...styles.totalRowFinal, ...{ fontSize: '1.1rem', fontWeight: '700', borderTop: '1px solid #ddd', paddingTop: '8px', marginTop: '5px' }}; // Đổi tên class
+styles.discount = {...styles.totalRowDiscount, ...{ color: '#dc3545', fontWeight: '600' }}; 
+styles.final = {...styles.totalRowFinal, ...{ fontSize: '1.1rem', fontWeight: '700', borderTop: '1px solid #ddd', paddingTop: '8px', marginTop: '5px' }};

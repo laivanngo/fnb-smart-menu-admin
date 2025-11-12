@@ -1,5 +1,5 @@
-// Tệp: pages/dashboard/vouchers.js (ĐÃ SỬA LỖI HARD-CODE)
-// Mục đích: Trang quản lý Mã giảm giá (Voucher)
+// Tệp: pages/dashboard/vouchers.js
+// (BẢN VÁ 1.7 - ĐÃ THÊM PHÂN TRANG)
 
 import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
@@ -14,20 +14,20 @@ const getToken = () => {
 
 // Sử dụng biến này
 const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+const ITEMS_PER_PAGE = 50;
 
-// Component Form (dùng cho cả Tạo mới và Sửa)
+// --- Component Form (dùng cho cả Tạo mới và Sửa) ---
+// (Component này giữ nguyên, không thay đổi)
 function VoucherForm({ initialData, onSubmit, onCancel }) {
     const [voucher, setVoucher] = useState(initialData || {
         code: '', description: '', type: 'fixed', value: 0, min_order_value: 0, max_discount: null, is_active: true
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    // Cập nhật state nếu initialData thay đổi
     useEffect(() => {
         if (initialData) {
             setVoucher(initialData);
         } else {
-             // Reset về default khi tạo mới
             setVoucher({ code: '', description: '', type: 'fixed', value: 0, min_order_value: 0, max_discount: null, is_active: true });
         }
     }, [initialData]);
@@ -35,44 +35,36 @@ function VoucherForm({ initialData, onSubmit, onCancel }) {
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         let processedValue = value;
-        // Xử lý các trường số
         if (['value', 'min_order_value', 'max_discount'].includes(name)) {
             processedValue = value === '' ? null : parseFloat(value) || 0;
             if (name === 'max_discount' && processedValue === 0) {
-                 processedValue = null; // Max discount 0 nghĩa là không giới hạn
+                 processedValue = null; 
             }
         }
-
         setVoucher(prev => ({
             ...prev,
             [name]: type === 'checkbox' ? checked : processedValue
         }));
     };
 
-     // Xử lý khi đổi loại voucher
      const handleTypeChange = (e) => {
         const newType = e.target.value;
         setVoucher(prev => ({
             ...prev,
             type: newType,
-            // Reset max_discount nếu chuyển sang loại fixed
             max_discount: newType === 'fixed' ? null : prev.max_discount
         }));
     };
 
-
     const handleSubmit = async (e) => {
         e.preventDefault();
         setIsSubmitting(true);
-        // Đảm bảo max_discount là null nếu type là fixed
         const payload = {
             ...voucher,
             max_discount: voucher.type === 'fixed' ? null : voucher.max_discount,
-             // Đảm bảo các giá trị số không phải là null rỗng
              value: voucher.value || 0,
              min_order_value: voucher.min_order_value || 0,
         };
-
         await onSubmit(payload);
         setIsSubmitting(false);
     };
@@ -104,8 +96,9 @@ function VoucherForm({ initialData, onSubmit, onCancel }) {
         </form>
     );
 }
+// ---------------------------------------------
 
-// Component Trang chính
+// --- Component Trang chính (ĐÃ NÂNG CẤP) ---
 export default function VouchersPage() {
     const router = useRouter();
     const [vouchers, setVouchers] = useState([]);
@@ -114,28 +107,55 @@ export default function VouchersPage() {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
 
-    // --- Logic Fetch Dữ liệu ---
-    const fetchData = async () => {
+    // === THÊM STATE CHO PHÂN TRANG ===
+    const [page, setPage] = useState(1); 
+    const [isLastPage, setIsLastPage] = useState(false);
+    // ==================================
+
+    // --- NÂNG CẤP LOGIC FETCH DỮ LIỆU ---
+    const fetchData = async (pageNum = 1) => {
         setIsLoading(true); setError(''); const token = getToken();
         if (!token) { router.replace('/login'); return; }
-        
-        // 1. Thêm kiểm tra apiUrl
         if (!apiUrl) {
             setError("Lỗi cấu hình: API URL chưa được thiết lập.");
             setIsLoading(false);
             return;
         }
 
+        // Tính toán skip/limit
+        const limit = ITEMS_PER_PAGE;
+        const skip = (pageNum - 1) * limit;
+
         try {
-            // 2. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
-            const response = await fetch(`${apiUrl}/admin/vouchers/`, { headers: { 'Authorization': `Bearer ${token}` } });
+            // Thêm skip và limit vào URL
+            const response = await fetch(`${apiUrl}/admin/vouchers/?skip=${skip}&limit=${limit}`, { 
+                headers: { 'Authorization': `Bearer ${token}` } 
+            });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) throw new Error('Không thể tải Vouchers.');
-            const data = await response.json(); setVouchers(data);
-        } catch (err) { setError(err.message); /* (Xử lý lỗi token...) */ }
+            const data = await response.json(); 
+            setVouchers(data);
+            setPage(pageNum);
+            setIsLastPage(data.length < ITEMS_PER_PAGE);
+        } catch (err) { setError(err.message); }
         finally { setIsLoading(false); }
     };
-    useEffect(() => { fetchData(); }, []);
+
+    // Tải trang 1 khi mới vào
+    useEffect(() => { fetchData(1); }, []);
+
+    // --- CÁC HÀM XỬ LÝ NÚT PHÂN TRANG ---
+    const handleNextPage = () => {
+        if (!isLastPage) {
+            fetchData(page + 1); 
+        }
+    };
+    const handlePrevPage = () => {
+        if (page > 1) {
+            fetchData(page - 1); 
+        }
+    };
+    // =====================================
 
     // --- Logic Mở/Đóng Form ---
     const handleAddNew = () => { setEditingVoucher(null); setShowForm(true); };
@@ -145,14 +165,11 @@ export default function VouchersPage() {
     // --- Logic Submit Form (Tạo/Sửa) ---
     const handleFormSubmit = async (voucherData) => {
         setError(''); const token = getToken(); const isEditing = !!editingVoucher;
-
-        // 3. Thêm kiểm tra apiUrl
         if (!apiUrl) {
             setError("Lỗi cấu hình: API URL chưa được thiết lập.");
             return;
         }
         
-        // 4. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
         const url = isEditing ? `${apiUrl}/admin/vouchers/${editingVoucher.id}` : `${apiUrl}/admin/vouchers/`;
         const method = isEditing ? 'PUT' : 'POST';
         try {
@@ -162,28 +179,26 @@ export default function VouchersPage() {
             });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) { const d = await response.json(); throw new Error(d.detail || 'Lưu thất bại'); }
-            handleCloseForm(); fetchData();
-        } catch (err) { setError(err.message); /* (Xử lý lỗi token...) */ }
+            handleCloseForm();
+            fetchData(isEditing ? page : 1); // Tải lại trang 1 nếu Thêm, trang hiện tại nếu Sửa
+        } catch (err) { setError(err.message); }
     };
 
     // --- Logic Xóa Voucher ---
     const handleDelete = async (voucherId) => {
         if (!confirm('Bạn có chắc chắn muốn xóa mã giảm giá này?')) return;
         setError(''); const token = getToken();
-
-        // 5. Thêm kiểm tra apiUrl
         if (!apiUrl) {
             setError("Lỗi cấu hình: API URL chưa được thiết lập.");
             return;
         }
 
         try {
-            // 6. SỬA LỖI TẠI ĐÂY: Dùng ${apiUrl}
             const response = await fetch(`${apiUrl}/admin/vouchers/${voucherId}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } });
             if (response.status === 401) throw new Error('Token hết hạn.');
             if (!response.ok) throw new Error('Xóa thất bại.');
-            fetchData();
-        } catch (err) { setError(err.message); /* (Xử lý lỗi token...) */ }
+            fetchData(page); // Tải lại trang hiện tại
+        } catch (err) { setError(err.message); }
     };
 
     // --- Giao diện ---
@@ -193,6 +208,10 @@ export default function VouchersPage() {
             <Link href="/dashboard" style={styles.backLink}>← Quay lại Dashboard</Link>
             <h1>🎟️ Quản lý Mã Giảm Giá</h1>
             <button onClick={handleAddNew} style={styles.button}>+ Thêm Mã Mới</button>
+            <button onClick={() => fetchData(page)} style={{...styles.buttonAction, background: '#17a2b8', marginBottom: '15px', marginLeft: '10px'}} disabled={isLoading}>
+                 {isLoading ? 'Đang tải...' : 'Tải lại trang'}
+            </button>
+
             {error && <p style={styles.error}>{error}</p>}
 
             {/* Form Thêm/Sửa (popup) */}
@@ -201,6 +220,18 @@ export default function VouchersPage() {
                     <VoucherForm initialData={editingVoucher} onSubmit={handleFormSubmit} onCancel={handleCloseForm} />
                 </div>
             )}
+            
+            {/* === THÊM NÚT ĐIỀU HƯỚNG PHÂN TRANG (TRÊN) === */}
+            <div style={styles.paginationControls}>
+                <button onClick={handlePrevPage} disabled={isLoading || page <= 1} style={styles.buttonAction}>
+                    ‹ Trang trước
+                </button>
+                <span style={{padding: '0 15px', color: '#555', fontWeight: 'bold'}}>Trang {page}</span>
+                <button onClick={handleNextPage} disabled={isLoading || isLastPage} style={styles.buttonAction}>
+                    Trang sau ›
+                </button>
+            </div>
+            {/* ======================================= */}
 
             {/* Bảng hiển thị danh sách */}
             {isLoading ? <p>Đang tải...</p> : (
@@ -240,12 +271,24 @@ export default function VouchersPage() {
                     </tbody>
                 </table>
             )}
+            
+            {/* === THÊM NÚT ĐIỀU HƯỚNG PHÂN TRANG (DƯỚI) === */}
+            <div style={styles.paginationControls}>
+                <button onClick={handlePrevPage} disabled={isLoading || page <= 1} style={styles.buttonAction}>
+                    ‹ Trang trước
+                </button>
+                <span style={{padding: '0 15px', color: '#555', fontWeight: 'bold'}}>Trang {page}</span>
+                <button onClick={handleNextPage} disabled={isLoading || isLastPage} style={styles.buttonAction}>
+                    Trang sau ›
+                </button>
+            </div>
+            {/* ======================================= */}
+            
         </div>
     );
 }
 
-// --- CSS nội bộ ---
-// (Copy các styles từ trang products.js và thêm style cho Badge)
+// --- CSS (THÊM STYLE MỚI) ---
 const styles = {
     container: { padding: '30px' },
     backLink: { display: 'inline-block', marginBottom: '20px', color: '#555', textDecoration: 'none' },
@@ -255,13 +298,14 @@ const styles = {
     th: { background: '#f4f4f4', padding: '12px', border: '1px solid #ddd', textAlign: 'left', whiteSpace: 'nowrap' },
     td: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle', fontSize: '0.9rem' },
     tdCenter: { padding: '20px', border: '1px solid #ddd', textAlign: 'center', color: '#777' },
-    buttonAction: { padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500' },
+    buttonAction: { padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', background: '#007bff', color: 'white' },
     editButton: { marginRight: '5px', padding: '5px 10px', background: '#ffc107', border: 'none', borderRadius: '4px', cursor: 'pointer', color: '#333', fontSize: '0.8rem' },
     deleteButton: { padding: '5px 10px', background: '#dc3545', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white', fontSize: '0.8rem' },
     popupBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '600px' }, // Tăng chiều rộng popup
+    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '600px', overflowY: 'auto', maxHeight: '90vh' },
     input: { display: 'block', width: '100%', padding: '10px', marginBottom: '15px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '1rem' },
     formActions: { marginTop: '20px', display: 'flex', justifyContent: 'flex-end', gap: '10px' },
     activeBadge: { background: '#28a745', color: 'white', padding: '3px 8px', borderRadius: '10px', fontSize: '0.8em' },
-    inactiveBadge: { background: '#6c757d', color: 'white', padding: '3px 8px', borderRadius: '10px', fontSize: '0.8em' }
+    inactiveBadge: { background: '#6c757d', color: 'white', padding: '3px 8px', borderRadius: '10px', fontSize: '0.8em' },
+    paginationControls: { marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, // Style cho Nút phân trang
 };
