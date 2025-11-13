@@ -1,7 +1,7 @@
 // Tệp: pages/dashboard/orders.js
-// (BẢN VÁ 1.6 - ĐÃ THÊM PHÂN TRANG)
+// (BẢN VÁ 1.7 - ĐÃ THÊM WEBSOCKET HOÀN CHỈNH)
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Link from 'next/link';
@@ -59,7 +59,6 @@ function OrderDetails({ orderId, onClose }) {
                  error ? <p style={styles.error}>{error}</p> :
                  orderDetails ? (
                     <div style={{fontSize: '0.9rem'}}>
-                        {/* === THÊM HIỂN THỊ NGÀY GIỜ ĐẶT HÀNG === */}
                         <p><strong>Ngày đặt:</strong> {new Date(orderDetails.created_at).toLocaleString('vi-VN')}</p> 
                         <hr style={{margin: '10px 0'}}/>
                         <p><strong>Khách hàng:</strong> {orderDetails.customer_name}</p>
@@ -101,7 +100,7 @@ function OrderDetails({ orderId, onClose }) {
 }
 
 
-// --- Component Trang chính (ĐÃ NÂNG CẤP) ---
+// --- Component Trang chính (ĐÃ NÂNG CẤP + WEBSOCKET) ---
 export default function OrdersPage() {
     const router = useRouter();
     const [orders, setOrders] = useState([]); 
@@ -109,15 +108,20 @@ export default function OrdersPage() {
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(true);
     
-    // === THÊM STATE CHO PHÂN TRANG ===
-    const [page, setPage] = useState(1); // Mặc định là trang 1
-    const [isLastPage, setIsLastPage] = useState(false); // Cờ để biết đây có phải trang cuối không
-    // ==================================
+    // ⬇️ WEBSOCKET STATE ⬇️
+    const ws = useRef(null);
+    const [isConnected, setIsConnected] = useState(false);
+    const [lastNotification, setLastNotification] = useState(null);
+    // ⬆️ END WEBSOCKET STATE ⬆️
+    
+    // === STATE CHO PHÂN TRANG ===
+    const [page, setPage] = useState(1);
+    const [isLastPage, setIsLastPage] = useState(false);
 
     const orderStatuses = ["MOI", "DA_XAC_NHAN", "DANG_THUC_HIEN", "DANG_GIAO", "HOAN_TAT", "DA_HUY"];
     const statusLabels = { "MOI": "Mới", "DA_XAC_NHAN": "Đã xác nhận", "DANG_THUC_HIEN": "Đang làm", "DANG_GIAO": "Đang giao", "HOAN_TAT": "Hoàn tất", "DA_HUY": "Đã hủy" };
 
-    // --- NÂNG CẤP LOGIC FETCH DỮ LIỆU ---
+    // --- FETCH DỮ LIỆU ---
     const fetchData = async (pageNum = 1) => { 
         setIsLoading(true); setError(''); 
         const token = getToken();
@@ -128,12 +132,10 @@ export default function OrdersPage() {
             return;
         }
 
-        // Tính toán skip/limit
         const limit = ITEMS_PER_PAGE;
         const skip = (pageNum - 1) * limit;
         
         try {
-            // Thêm skip và limit vào URL
             const response = await fetch(`${apiUrl}/admin/orders/?skip=${skip}&limit=${limit}`, { 
                 headers: { 'Authorization': `Bearer ${token}` } 
             });
@@ -142,10 +144,8 @@ export default function OrdersPage() {
             
             const data = await response.json();
             setOrders(data);
-            setPage(pageNum); // Cập nhật số trang hiện tại
+            setPage(pageNum);
 
-            // Kiểm tra xem đây có phải trang cuối không
-            // Nếu số lượng kết quả trả về < số lượng yêu cầu, đây là trang cuối.
             if (data.length < ITEMS_PER_PAGE) {
                 setIsLastPage(true);
             } else {
@@ -162,128 +162,281 @@ export default function OrdersPage() {
         finally { setIsLoading(false); }
     };
 
-    // Chạy khi trang tải lần đầu (chạy 1 lần)
+    // Chạy khi trang tải lần đầu
     useEffect(() => { 
-        fetchData(1); // Tải trang 1
+        fetchData(1);
     }, []);
 
-    // --- CÁC HÀM XỬ LÝ NÚT PHÂN TRANG ---
+    // --- XỬ LÝ PHÂN TRANG ---
     const handleNextPage = () => {
         if (!isLastPage) {
-            fetchData(page + 1); // Tải trang kế tiếp
+            fetchData(page + 1);
         }
     };
-    const handlePrevPage = () => {
-        if (page > 1) {
-            fetchData(page - 1); // Tải trang trước đó
-        }
-    };
-    // =====================================
 
-    // --- Logic Cập nhật Trạng thái ---
-    const handleUpdateStatus = async (orderId, newStatus) => { 
-         setError(''); const token = getToken();
-        if (!apiUrl) {
-            setError("Lỗi cấu hình: API URL chưa được thiết lập.");
+    const handlePreviousPage = () => {
+        if (page > 1) {
+            fetchData(page - 1);
+        }
+    };
+
+    // --- XỬ LÝ TRẠNG THÁI ĐƠN HÀNG ---
+    const handleStatusChange = async (orderId, newStatus) => {
+        const token = getToken();
+        if (!token) return;
+        if (!apiUrl) return;
+
+        try {
+            const response = await fetch(`${apiUrl}/admin/orders/${orderId}/status?status=${newStatus}`, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                }
+            });
+            if (!response.ok) throw new Error('Không thể cập nhật trạng thái.');
+            
+            // Cập nhật lại danh sách
+            fetchData(page);
+        } catch (err) {
+            alert(`Lỗi: ${err.message}`);
+        }
+    };
+
+    const formatCurrency = (amount) => amount.toLocaleString('vi-VN') + 'đ';
+
+    // ⬇️ HÀM PHÁT ÂM THANH - DÙNG MP3 TÙY CHỈNH ⬇️
+    const playNotificationSound = () => {
+        try {
+            // Tạo Audio element
+            const audio = new Audio();
+            
+            // URL file MP3 - Thay đổi URL này để dùng file khác
+            // Option 1: File online (notification sound chuyên nghiệp)
+            audio.src = '/tayduky.mp3';
+            
+            // Option 2: File local trong thư mục public (nếu bạn upload)
+            // audio.src = '/notification-sound.mp3';
+            
+            // Cấu hình
+            audio.volume = 1.0; // Âm lượng tối đa (0.0 - 1.0)
+            audio.preload = 'auto'; // Tải trước
+            
+            // Phát âm thanh
+            const playPromise = audio.play();
+            
+            if (playPromise !== undefined) {
+                playPromise
+                    .then(() => {
+                        console.log('🔔 Đã phát âm thanh MP3 thông báo');
+                    })
+                    .catch(error => {
+                        console.warn('⚠️ Trình duyệt chặn autoplay:', error);
+                        console.log('💡 Hãy click vào trang trước để cho phép âm thanh');
+                    });
+            }
+        } catch (error) {
+            console.error('⚠️ Lỗi phát âm thanh:', error);
+        }
+    };
+    // ⬆️ END HÀM PHÁT ÂM THANH MP3 ⬆️
+
+    // ⬇️ HÀM HIỂN THỊ POPUP ⬇️
+    const showNotification = (title, message) => {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+            if (Notification.permission === 'granted') {
+                new Notification(title, {
+                    body: message,
+                    icon: '/favicon.ico',
+                    badge: '/favicon.ico',
+                    tag: 'order-notification',
+                    requireInteraction: true
+                });
+            } else if (Notification.permission !== 'denied') {
+                Notification.requestPermission().then(permission => {
+                    if (permission === 'granted') {
+                        new Notification(title, {
+                            body: message,
+                            icon: '/favicon.ico'
+                        });
+                    }
+                });
+            }
+        }
+        
+        console.log(`📣 Thông báo: ${title} - ${message}`);
+    };
+    // ⬆️ END HÀM HIỂN THỊ POPUP ⬆️
+
+    // ⬇️ WEBSOCKET CONNECTION ⬇️
+    useEffect(() => {
+        const token = getToken();
+        if (!token) {
+            console.log('⚠️ Chưa login, không kết nối WebSocket');
             return;
         }
-        try {
-            const response = await fetch(`${apiUrl}/admin/orders/${orderId}/status?status=${newStatus}`, { 
-                method: 'PUT', headers: { 'Authorization': `Bearer ${token}` } 
-            });
-            if (response.status === 401) throw new Error('Token hết hạn.');
-            if (!response.ok) { const d=await response.json(); throw new Error(d.detail || 'Cập nhật thất bại'); }
+        
+        const wsUrl = 'ws://localhost:8000/ws/admin/orders';
+        console.log('🔌 Đang kết nối WebSocket:', wsUrl);
+        
+        ws.current = new WebSocket(wsUrl);
+        
+        // Kết nối thành công
+        ws.current.onopen = () => {
+            console.log('✅ WebSocket đã kết nối!');
+            setIsConnected(true);
+        };
+        
+        // Nhận message từ server
+        ws.current.onmessage = (event) => {
+            console.log('📩 Nhận WebSocket message:', event.data);
             
-            // Thay vì tải lại toàn bộ, chỉ cập nhật 1 dòng
-            setOrders(prevOrders => prevOrders.map(order => 
-                order.id === orderId ? { ...order, status: newStatus } : order
-            ));
+            try {
+                const data = JSON.parse(event.data);
+                
+                if (data.type === 'new_order') {
+                    console.log('🆕 Có đơn hàng mới!', data);
+                    
+                    // 1. Phát âm thanh
+                    playNotificationSound();
+                    
+                    // 2. Hiển thị popup
+                    const message = `Đơn #${data.order_id} - ${data.customer_name}\nTổng: ${data.total_amount.toLocaleString('vi-VN')}₫`;
+                    showNotification('🔔 ĐƠN HÀNG MỚI!', message);
+                    
+                    // 3. Lưu thông báo mới nhất
+                    setLastNotification(data);
+                    
+                    // 4. Reload danh sách đơn hàng - FIX LỖI TẠI ĐÂY!
+                    fetchData(page);
+                    
+                    // 5. Làm nổi bật tab trình duyệt
+                    document.title = `(1) Đơn mới - Quản lý Đơn hàng`;
+                    setTimeout(() => {
+                        document.title = 'Quản lý Đơn hàng';
+                    }, 5000);
+                }
+            } catch (error) {
+                console.error('⚠️ Lỗi parse WebSocket data:', error);
+            }
+        };
+        
+        // Lỗi kết nối
+        ws.current.onerror = (error) => {
+            console.error('❌ Lỗi WebSocket:', error);
+            setIsConnected(false);
+        };
+        
+        // Đóng kết nối
+        ws.current.onclose = () => {
+            console.log('🔌 WebSocket đã đóng');
+            setIsConnected(false);
+        };
+        
+        // Cleanup
+        return () => {
+            if (ws.current) {
+                console.log('🔌 Đóng WebSocket connection');
+                ws.current.close();
+            }
+        };
+    }, [page]); // Thêm page vào deps để fetchData có thể dùng page hiện tại
+    // ⬆️ END WEBSOCKET CONNECTION ⬆️
 
-        } catch (err) { setError(err.message); }
-    };
-
-    // --- Giao diện ---
     return (
         <div style={styles.container}>
             <Head><title>Quản lý Đơn hàng</title></Head>
             <Link href="/dashboard" style={styles.backLink}>← Quay lại Dashboard</Link>
-            <h1>🛒 Quản lý Đơn hàng</h1>
-             <button onClick={() => fetchData(page)} style={{...styles.buttonAction, background: '#17a2b8', marginBottom: '15px'}} disabled={isLoading}>
-                 {isLoading ? 'Đang tải...' : 'Tải lại trang hiện tại'}
-            </button> 
+            
+            {/* HIỂN THỊ TRẠNG THÁI WEBSOCKET */}
+            <div style={{display: 'flex', alignItems: 'center', gap: '15px'}}>
+                <h1>📦 Quản lý Đơn hàng</h1>
+                
+                {isConnected ? (
+                    <span style={styles.connectedBadge}>
+                        🟢 Real-time đang bật
+                    </span>
+                ) : (
+                    <span style={styles.disconnectedBadge}>
+                        🔴 Real-time đang tắt
+                    </span>
+                )}
+            </div>
 
             {error && <p style={styles.error}>{error}</p>}
-            
-            {/* === THÊM NÚT ĐIỀU HƯỚNG PHÂN TRANG === */}
-            <div style={styles.paginationControls}>
-                <button onClick={handlePrevPage} disabled={isLoading || page <= 1} style={styles.buttonAction}>
-                    ‹ Trang trước
-                </button>
-                <span style={{padding: '0 15px', color: '#555', fontWeight: 'bold'}}>Trang {page}</span>
-                <button onClick={handleNextPage} disabled={isLoading || isLastPage} style={styles.buttonAction}>
-                    Trang sau ›
-                </button>
-            </div>
-            {/* ======================================= */}
 
-            {isLoading ? <p>Đang tải đơn hàng...</p> : (
-                <table style={styles.table}>
-                    <thead>
-                        <tr>
-                            <th style={styles.th}>Mã ĐH</th>
-                            {/* === THÊM CỘT THỜI GIAN === */}
-                            <th style={styles.th}>Thời gian đặt</th> 
-                            <th style={styles.th}>Tổng tiền</th>
-                            <th style={styles.th}>Trạng thái</th>
-                            <th style={styles.th}>Hành động</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {orders.length === 0 ? (
-                            <tr><td colSpan="5" style={styles.tdCenter}>Chưa có đơn hàng nào.</td></tr>
-                        ) : (
-                            orders.map((order) => (
-                                <tr key={order.id} style={order.status === 'MOI' ? {background: '#fffbe6'} : {}}>
-                                    <td style={{...styles.td, fontWeight: 'bold'}}>#{order.id}</td>
-                                    {/* === THÊM DỮ LIỆU THỜI GIAN === */}
+            {isLoading ? (
+                <p>Đang tải danh sách đơn hàng...</p>
+            ) : orders.length === 0 ? (
+                <p>Chưa có đơn hàng nào.</p>
+            ) : (
+                <>
+                    <table style={styles.table}>
+                        <thead>
+                            <tr>
+                                <th style={styles.th}>Mã ĐH</th>
+                                <th style={styles.th}>Thời gian đặt</th>
+                                <th style={styles.th}>Tổng tiền</th>
+                                <th style={styles.th}>Trạng thái</th>
+                                <th style={styles.th}>Hành động</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {orders.map(order => (
+                                <tr key={order.id}>
+                                    <td style={styles.td}>#{order.id}</td>
                                     <td style={styles.tdSmall}>{new Date(order.created_at).toLocaleString('vi-VN')}</td>
-                                    <td style={styles.td}>{order.total_amount.toLocaleString('vi-VN')}đ</td>
+                                    <td style={styles.td}>{formatCurrency(order.total_amount)}</td>
                                     <td style={styles.td}>
-                                        <select value={order.status} onChange={(e) => handleUpdateStatus(order.id, e.target.value)} style={styles.statusSelect} >
-                                            {orderStatuses.map(status => ( <option key={status} value={status}> {statusLabels[status] || status} </option> ))}
+                                        <select 
+                                            value={order.status} 
+                                            onChange={(e) => handleStatusChange(order.id, e.target.value)}
+                                            style={styles.statusSelect}
+                                        >
+                                            {orderStatuses.map(st => (
+                                                <option key={st} value={st}>{statusLabels[st]}</option>
+                                            ))}
                                         </select>
                                     </td>
                                     <td style={styles.td}>
-                                        <button onClick={() => setSelectedOrderId(order.id)} style={styles.detailButton}>Xem CT</button>
+                                        <button 
+                                            onClick={() => setSelectedOrderId(order.id)} 
+                                            style={styles.detailButton}
+                                        >
+                                            Xem CT
+                                        </button>
                                     </td>
-                                 </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
-            )}
-            
-            {/* === THÊM NÚT ĐIỀU HƯỚNG (BÊN DƯỚI) === */}
-            <div style={styles.paginationControls}>
-                <button onClick={handlePrevPage} disabled={isLoading || page <= 1} style={styles.buttonAction}>
-                    ‹ Trang trước
-                </button>
-                <span style={{padding: '0 15px', color: '#555', fontWeight: 'bold'}}>Trang {page}</span>
-                <button onClick={handleNextPage} disabled={isLoading || isLastPage} style={styles.buttonAction}>
-                    Trang sau ›
-                </button>
-            </div>
-            {/* ======================================= */}
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
 
-            {/* Modal xem chi tiết (Truyền ID vào) */}
-            {selectedOrderId && (
-                <OrderDetails orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} />
+                    {/* NÚT PHÂN TRANG */}
+                    <div style={styles.paginationControls}>
+                        <button 
+                            onClick={handlePreviousPage} 
+                            disabled={page === 1}
+                            style={{...styles.buttonAction, opacity: page === 1 ? 0.5 : 1}}
+                        >
+                            ← Trang trước
+                        </button>
+                        <span>Trang {page}</span>
+                        <button 
+                            onClick={handleNextPage} 
+                            disabled={isLastPage}
+                            style={{...styles.buttonAction, opacity: isLastPage ? 0.5 : 1}}
+                        >
+                            Trang sau →
+                        </button>
+                    </div>
+                </>
             )}
+
+            {selectedOrderId && <OrderDetails orderId={selectedOrderId} onClose={() => setSelectedOrderId(null)} />}
         </div>
     );
 }
 
-// --- CSS (THÊM STYLE MỚI) ---
+// --- CSS (HOÀN CHỈNH) ---
 const styles = {
     container: { padding: '30px' },
     backLink: { display: 'inline-block', marginBottom: '20px', color: '#555', textDecoration: 'none' },
@@ -291,22 +444,36 @@ const styles = {
     table: { width: '100%', borderCollapse: 'collapse', marginTop: '20px' },
     th: { background: '#f4f4f4', padding: '12px', border: '1px solid #ddd', textAlign: 'left', whiteSpace: 'nowrap' },
     td: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle', fontSize: '0.9rem' },
-    tdSmall: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle', fontSize: '0.85em', color: '#555' }, // Style cho cột thời gian
+    tdSmall: { padding: '10px', border: '1px solid #ddd', verticalAlign: 'middle', fontSize: '0.85em', color: '#555' },
     tdCenter: { padding: '20px', border: '1px solid #ddd', textAlign: 'center', color: '#777' },
     statusSelect: { padding: '5px', borderRadius: '4px', border: '1px solid #ccc' },
     detailButton: { padding: '5px 10px', background: '#17a2b8', border: 'none', borderRadius: '4px', cursor: 'pointer', color: 'white', fontSize: '0.8rem' },
     popupBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 },
-    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflowY: 'auto' }, // Cho phép scroll popup
+    formPopup: { background: 'white', padding: '30px', borderRadius: '8px', boxShadow: '0 5px 15px rgba(0,0,0,0.2)', width: '90%', maxWidth: '600px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', overflowY: 'auto' },
     buttonAction: { padding: '8px 12px', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '500', background: '#007bff', color: 'white' },
-    paginationControls: { marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }, // Style cho Nút phân trang
-    checkoutTotal: { fontSize: '1rem', marginTop: 'auto', paddingTop: '15px', borderTop: '1px solid #eee' }, 
-    totalRow: { display: 'flex', justifyContent: 'space-between', marginBottom: '5px', fontSize: '0.95rem' },
-    totalRowDiscount: { color: '#dc3545', fontWeight: '600' },
-    totalRowFinal: { fontSize: '1.1rem', fontWeight: '700', borderTop: '1px solid #ddd', paddingTop: '8px', marginTop: '5px' }
+    paginationControls: { marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+    connectedBadge: {
+        background: '#28a745',
+        color: 'white',
+        padding: '5px 12px',
+        borderRadius: '20px',
+        fontSize: '0.85rem',
+        fontWeight: '600',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        boxShadow: '0 2px 8px rgba(40, 167, 69, 0.3)'
+    },
+    disconnectedBadge: {
+        background: '#dc3545',
+        color: 'white',
+        padding: '5px 12px',
+        borderRadius: '20px',
+        fontSize: '0.85rem',
+        fontWeight: '600',
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        boxShadow: '0 2px 8px rgba(220, 53, 69, 0.3)'
+    }
 };
-
-// Merge các style checkout
-styles.checkoutTotal = {...styles.checkoutTotal, ...{ marginTop: '15px', paddingTop: '15px', borderTop: '1px solid #eee' }};
-styles.totalRow = {...styles.totalRow, ...{ marginBottom: '5px', fontSize: '0.95rem' }};
-styles.discount = {...styles.totalRowDiscount, ...{ color: '#dc3545', fontWeight: '600' }}; 
-styles.final = {...styles.totalRowFinal, ...{ fontSize: '1.1rem', fontWeight: '700', borderTop: '1px solid #ddd', paddingTop: '8px', marginTop: '5px' }};
