@@ -1,4 +1,4 @@
-# Tệp: fnb-smart-menu-frontend/.dockerignore
+# Tệp: fnb-smart-menu-admin/.dockerignore
 
 node_modules
 .next
